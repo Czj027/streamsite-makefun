@@ -11,11 +11,12 @@ const destination = resolve(process.env.MAKEFUN_OUTPUT_DIR ?? '/output', 'answer
 const cases = JSON.parse(readFileSync(source, 'utf8'));
 const output = openSync(destination, 'w');
 try {
+  writeFileSync(output, '[');
   for (let index = 0; index < cases.length; index++) {
-    const prefix = index === 0 ? '[' : ',';
-    writeFileSync(output, prefix + JSON.stringify(run(cases[index].input)));
+    if (index !== 0) writeFileSync(output, ',');
+    writeFileSync(output, JSON.stringify(run(cases[index].input)));
   }
-  writeFileSync(output, cases.length === 0 ? '[]' : ']');
+  writeFileSync(output, ']');
 } finally {
   closeSync(output);
 }

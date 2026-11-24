@@ -51,7 +51,7 @@ function readField(name, raw) {
 }
 
 export function readSource(content) {
-  const source = content.replace(/\r\n?/g, '\n');
+  const source = content.includes('\r') ? content.replace(/\r\n?/g, '\n') : content;
   if (source !== '---' && !source.startsWith('---\n')) return 'no front matter';
 
   let end = source.indexOf('\n---', 3);

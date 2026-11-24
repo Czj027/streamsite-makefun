@@ -1,7 +1,7 @@
-import { Slugs, escape } from './text.js';
+import { Slugs, entity, escape } from './text.js';
 
 const punctuation = new Set('\\`*_[]()#+-.!>');
-const special = /[\\`*[]/g;
+const special = /[\\`*[&<>"']/g;
 
 function closing(text, from, marker) {
   let match = text.indexOf(marker, from);
@@ -27,11 +27,10 @@ function renderSpan(text, href) {
   let from = 0;
   while (from < text.length) {
     special.lastIndex = from;
-    const match = special.exec(text);
-    if (match === null) return html + escape(text.slice(from));
-    const start = match.index;
-    const character = match[0];
-    if (start !== from) html += escape(text.slice(from, start));
+    if (!special.test(text)) return html + text.slice(from);
+    const start = special.lastIndex - 1;
+    const character = text[start];
+    if (start !== from) html += text.slice(from, start);
     from = start + 1;
 
     if (character === '\\' && punctuation.has(text[from])) {
@@ -63,7 +62,7 @@ function renderSpan(text, href) {
         }
       }
       html += '[';
-    } else html += character;
+    } else html += entity(character);
   }
   return html;
 }
