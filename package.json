@@ -1,0 +1,6 @@
+{
+  "name": "streamsite-makefun",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.18.0" }
+}
