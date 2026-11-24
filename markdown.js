@@ -1,16 +1,22 @@
-import { Slugs, entity, escape } from './text.js';
+import { Slugs, escape } from './text.js';
 
 const punctuation = new Set('\\`*_[]()#+-.!>');
-const special = /[\\`*[&<>"']/g;
+const special = /[\\`*[]/g;
 
 function closing(text, from, marker) {
-  for (let cursor = from; cursor < text.length; cursor++) {
-    if (text[cursor] === '\\' && punctuation.has(text[cursor + 1])) {
-      cursor++;
-    } else if (marker === '*' && text[cursor] === '*' && text[cursor + 1] === '*') {
-      cursor++;
-    } else if (text.startsWith(marker, cursor)) {
-      return cursor;
+  let match = text.indexOf(marker, from);
+  if (match < 0) return -1;
+  let slash = text.indexOf('\\', from);
+  while (match >= 0) {
+    if (slash >= 0 && slash < match) {
+      const escaped = punctuation.has(text[slash + 1]);
+      const after = slash + (escaped ? 2 : 1);
+      if (match < after) match = text.indexOf(marker, after);
+      slash = text.indexOf('\\', after);
+    } else if (marker === '*' && text[match + 1] === '*') {
+      match = text.indexOf('*', match + 2);
+    } else {
+      return match;
     }
   }
   return -1;
@@ -22,14 +28,14 @@ function renderSpan(text, href) {
   while (from < text.length) {
     special.lastIndex = from;
     const match = special.exec(text);
-    if (match === null) return html + text.slice(from);
+    if (match === null) return html + escape(text.slice(from));
     const start = match.index;
     const character = match[0];
-    html += text.slice(from, start);
+    if (start !== from) html += escape(text.slice(from, start));
     from = start + 1;
 
     if (character === '\\' && punctuation.has(text[from])) {
-      html += entity(text[from++]);
+      html += escape(text[from++]);
     } else if (character === '`') {
       const end = text.indexOf('`', from);
       if (end > from) {
@@ -57,12 +63,18 @@ function renderSpan(text, href) {
         }
       }
       html += '[';
-    } else html += entity(character);
+    } else html += character;
   }
   return html;
 }
 
-const trim = line => line.replace(/^[ \t]+|[ \t]+$/g, '');
+function trim(line) {
+  let start = 0;
+  let end = line.length;
+  while (start < end && (line[start] === ' ' || line[start] === '\t')) start++;
+  while (end > start && (line[end - 1] === ' ' || line[end - 1] === '\t')) end--;
+  return start === 0 && end === line.length ? line : line.slice(start, end);
+}
 const blank = /^[ \t]*$/;
 const fence = /^```([a-zA-Z0-9_+-]*)[ \t]*$/;
 const fenceClose = /^```[ \t]*$/;
@@ -89,7 +101,7 @@ export function renderMarkdown(body, href, slug) {
   const toc = [];
   const ids = new Slugs();
   let excerpt;
-  let html = '';
+  const chunks = [];
   let index = 0;
   while (index < lines.length) {
     const line = lines[index++];
@@ -98,10 +110,10 @@ export function renderMarkdown(body, href, slug) {
 
     const code = first === '`' ? fence.exec(line) : null;
     if (code) {
-      html += code[1] ? `<pre><code class="language-${code[1]}">` : '<pre><code>';
-      while (index < lines.length && !fenceClose.test(lines[index])) html += escape(lines[index++]) + '\n';
+      chunks.push(code[1] ? `<pre><code class="language-${code[1]}">` : '<pre><code>');
+      while (index < lines.length && !fenceClose.test(lines[index])) chunks.push(escape(lines[index++]) + '\n');
       index++;
-      html += '</code></pre>\n';
+      chunks.push('</code></pre>\n');
       continue;
     }
 
@@ -110,13 +122,13 @@ export function renderMarkdown(body, href, slug) {
       const level = header[1].length;
       const id = ids.take(slug(header[2]));
       const title = renderSpan(header[2], href);
-      html += `<h${level} id="${id}">${title}</h${level}>\n`;
+      chunks.push(`<h${level} id="${id}">${title}</h${level}>\n`);
       if (level === 2 || level === 3) toc.push({ level, id, html: title });
       continue;
     }
 
     if ((first === '-' || first === '*') && rule.test(line)) {
-      html += '<hr>\n';
+      chunks.push('<hr>\n');
       continue;
     }
     if (first === '>') {
@@ -128,9 +140,9 @@ export function renderMarkdown(body, href, slug) {
         if (lines[index]?.[0] !== '>') break;
         index++;
       } while (true);
-      html += '<blockquote>\n';
-      if (quoted.length) html += `<p>${renderSpan(quoted.join('\n'), href)}</p>\n`;
-      html += '</blockquote>\n';
+      chunks.push('<blockquote>\n');
+      if (quoted.length) chunks.push(`<p>${renderSpan(quoted.join('\n'), href)}</p>\n`);
+      chunks.push('</blockquote>\n');
       continue;
     }
 
@@ -143,15 +155,15 @@ export function renderMarkdown(body, href, slug) {
     }
     if (item) {
       const tag = ordered ? 'ol' : 'ul';
-      html += ordered && +item[1] !== 1 ? `<ol start="${+item[1]}">\n` : `<${tag}>\n`;
+      chunks.push(ordered && +item[1] !== 1 ? `<ol start="${+item[1]}">\n` : `<${tag}>\n`);
       while (item) {
         let text = trim(item[ordered + 1]);
         while (index < lines.length && continuation.test(lines[index])) text += '\n' + trim(lines[index++]);
-        html += `<li>${renderSpan(text, href)}</li>\n`;
+        chunks.push(`<li>${renderSpan(text, href)}</li>\n`);
         item = index < lines.length ? items[ordered].exec(lines[index]) : null;
         if (item) index++;
       }
-      html += `</${tag}>\n`;
+      chunks.push(`</${tag}>\n`);
       continue;
     }
 
@@ -159,7 +171,7 @@ export function renderMarkdown(body, href, slug) {
     while (index < lines.length && !stopsParagraph(lines[index])) paragraph += '\n' + trim(lines[index++]);
     const rendered = renderSpan(paragraph, href);
     excerpt ??= rendered;
-    html += `<p>${rendered}</p>\n`;
+    chunks.push(`<p>${rendered}</p>\n`);
   }
-  return { html, toc, excerpt: excerpt ?? '' };
+  return { html: chunks.join(''), toc, excerpt: excerpt ?? '' };
 }

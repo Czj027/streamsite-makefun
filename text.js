@@ -2,7 +2,7 @@ const entities = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '
 const monthNames = 'January February March April May June July August September October November December'.split(' ');
 
 export const entity = character => entities[character] ?? character;
-export const escape = text => text.replace(/[&<>"']/g, entity);
+export const escape = text => /[&<>"']/.test(text) ? text.replace(/[&<>"']/g, entity) : text;
 
 export function toSlug(text) {
   const latin = /[^\x00-\x7f]/.test(text) ? text.normalize('NFKD').replace(/\p{M}/gu, '') : text;

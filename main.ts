@@ -2,7 +2,8 @@ import { closeSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { setFlagsFromString } from 'node:v8';
 
-setFlagsFromString('--no-incremental-marking');
+// These short, fresh-process runs benefit from retaining baseline JIT without tiering up.
+setFlagsFromString('--no-incremental-marking --no-turbofan --no-maglev');
 const { run } = await import('./solve.js');
 
 const source = resolve(process.env.MAKEFUN_INPUT_DIR ?? '/input', 'cases.json');

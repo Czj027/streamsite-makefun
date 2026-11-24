@@ -1,6 +1,7 @@
 import { readSource } from './frontmatter.js';
 import { renderMarkdown } from './markdown.js';
-import { compileTemplate, render } from './template.js';
+import { compileTemplate } from './template.js';
+import { makeRenderer } from './compiled-template.js';
 import { Slugs, formatDate, order, toSlug } from './text.js';
 
 const reserved = ['posts', 'tags', 'page'];
@@ -169,6 +170,7 @@ export function run(input) {
     recent: cards.slice(0, site.recent),
   };
   const output = {};
+  const draw = makeRenderer(templates, roots);
   const pageRoots = { ...roots, page: null };
   for (const item of pages) {
     pageRoots.page = {
@@ -180,29 +182,27 @@ export function run(input) {
       older: item.older ?? null,
       is_post: item.isPost,
     };
-    output[`${item.permalink}/index.html`] = render(templates.get(item.layout), pageRoots, templates);
+    output[`${item.permalink}/index.html`] = draw(item.layout, pageRoots);
   }
 
   if (templates.has('index')) {
     const pageSize = site.per_page;
     const total = Math.max(1, Math.ceil(cards.length / pageSize));
     const url = number => number === 1 ? `${base}/` : `${base}/page/${number}/`;
-    const index = templates.get('index');
     for (let number = 1; number <= total; number++) {
       const pager = { number, total, url: url(number), newer_url: number === 1 ? '' : url(number - 1), older_url: number === total ? '' : url(number + 1) };
       const path = number === 1 ? 'index.html' : `page/${number}/index.html`;
-      output[path] = render(index, { ...roots, pager, posts: cards.slice((number - 1) * pageSize, number * pageSize) }, templates);
+      output[path] = draw('index', { ...roots, pager, posts: cards.slice((number - 1) * pageSize, number * pageSize) });
     }
   }
 
   if (templates.has('tag')) {
-    const template = templates.get('tag');
     for (const group of groups) {
       const tag = { ...group.label, count: group.posts.length, posts: group.posts.map(page => page.card) };
-      output[`tags/${tag.slug}/index.html`] = render(template, { ...roots, tag }, templates);
+      output[`tags/${tag.slug}/index.html`] = draw('tag', { ...roots, tag });
     }
   }
-  if (templates.has('tags')) output['tags/index.html'] = render(templates.get('tags'), roots, templates);
+  if (templates.has('tags')) output['tags/index.html'] = draw('tags', roots);
 
   for (const { path, content } of statics) {
     if (Object.hasOwn(output, path)) messages.push(`shadowed ${path}: a built page has its path`);
